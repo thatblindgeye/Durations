@@ -1,19 +1,18 @@
+delete state.Durations;
 const Durations = (function () {
   "use strict";
 
   const VERSION = "1.0";
-  const PREFIX = "!durations";
   const LAST_UPDATED = 1668283397577;
-  const DURATION_DISPLAY_NAME = `Durations v${VERSION}`;
+  const DURATION_BASE_NAME = "Durations";
+  const DURATION_DISPLAY_NAME = `${DURATION_BASE_NAME} v${VERSION}`;
   const COMMANDS = {
     ADD_DURATION: "add-duration",
-    ADD_GM_DURATION: "add-gmd",
-    SHOW_GM_DURATIONS: "show-gmd",
-    DELETE_GM_DURATION: "delete-gmd",
+    ADD_GM_DURATION: "add-gmduration",
+    SHOW_GM_DURATIONS: "show-gmduration",
+    DELETE_GM_DURATION: "delete-gmduration",
     CLEAR: "clear",
-    CLEAR_TURNORDER: "clear-turnorder",
     SORT: "sort",
-    SORT_TURNORDER: "sort-turnorder",
     CONFIG: "config",
   };
 
@@ -23,6 +22,7 @@ const Durations = (function () {
     ROUND_DISPLAY_NAME: "roundDisplayName",
   };
 
+  const PREFIX = "!durations";
   const MACROS = {
     ADD_DURATION_MACRO: {
       name: "Durations-add",
@@ -37,43 +37,52 @@ const Durations = (function () {
       action: `${PREFIX} ${COMMANDS.SHOW_GM_DURATIONS}`,
     },
     CLEAR_MACRO: {
-      name: "Durations clear-turnorder",
+      name: "Durations-clear-turnorder",
       action: `${PREFIX} ${COMMANDS.CLEAR}`,
     },
     SORT_MACRO: {
       name: "Durations-sort-turnorder",
       action: `${PREFIX} ${COMMANDS.SORT}|?{Starting round}|?{Round formula}|?{Sort order|Ascending|Descending}`,
     },
-    CONFIG_MACRO: {
-      name: "Durations-config",
-      action: `${PREFIX} ${COMMANDS.CONFIG}`,
-    },
   };
 
   const DEFAULT_STATE = {
     gmDurations: [],
     roundDisplayName: "<= Round =>",
-    isTurnorderSorted: false,
+    IsInitiallySorted: false,
     autoDeleteDurations: true,
     autoClearTurnorder: true,
     version: VERSION,
   };
 
   function createMacros() {
-    const gmPlayers = _.filter(
-      findObjs({
-        _type: "player",
-      }),
-      (player) => playerIsGM(player.get("_id"))
+    const gmPlayers = _.pluck(
+      _.filter(
+        findObjs({
+          _type: "player",
+        }),
+        (player) => playerIsGM(player.get("_id"))
+      ),
+      "id"
     );
 
     _.each(MACROS, (macro) => {
-      createObj("macro", {
-        _playerid: gmPlayers[0].get("_id"),
-        name: macro.name,
-        action: macro.action,
-        visibleto: _.pluck(gmPlayers, "id").join(","),
-      });
+      const existingMacro = findObjs(
+        { _type: "macro", name: macro.name },
+        { caseInsensitive: true }
+      );
+
+      if (!existingMacro.length) {
+        createObj("macro", {
+          _playerid: gmPlayers[0],
+          name: macro.name,
+          action: macro.action,
+          visibleto:
+            macro.name === MACROS.ADD_DURATION_MACRO.name
+              ? "all"
+              : gmPlayers.join(","),
+        });
+      }
     });
   }
 
@@ -96,46 +105,144 @@ const Durations = (function () {
   }
 
   function validateCommand(message) {
-    const {
-      ADD_DURATION,
-      ADD_GM_DURATION,
-      SHOW_GM_DURATIONS,
-      DELETE_GM_DURATION,
-      CLEAR,
-      CLEAR_TURNORDER,
-      SORT,
-      SORT_TURNORDER,
-      CONFIG,
-    } = COMMANDS;
+    const { ADD_DURATION, ADD_GM_DURATION, SORT, CONFIG } = COMMANDS;
+    const { ROUND_DISPLAY_NAME, AUTO_CLEAR, AUTO_DELETE } = CONFIG_SETTINGS;
 
-    const [prefix, ...options] = _.map(message.content.split("|"), (msgItem) =>
-      msgItem.toLowerCase()
-    );
-    const command = prefix.split(" ")[1];
+    const [prefix, ...options] = message.content.split("|");
+    const command = _.map(prefix.split(" "), (prefixItem) =>
+      prefixItem.toLowerCase()
+    )[1];
 
-    if (!COMMANDS.includes(command)) {
+    if (command && !_.contains(COMMANDS, command)) {
       throw new Error(
         `<code>${command}</code> is not a valid command. Call the <code>!durations config</code> command for a list of valid commands.`
       );
     }
+
+    if (
+      _.contains(COMMANDS, command) &&
+      command !== ADD_DURATION &&
+      !playerIsGM(message.playerid)
+    ) {
+      throw new Error(
+        `/w "${message.who}" You do not have permission to use the <code>${command}</code> command.`
+      );
+    }
+
+    if (command === ADD_DURATION) {
+      if (!options[0] || !options[1]) {
+        throw new Error(
+          `When adding a duration, both a name and length must be included.`
+        );
+      }
+
+      const isLengthInvalid = isNaN(parseInt(options[1]));
+      const isInitiativeInvalid = isNaN(parseInt(options[2]));
+
+      if (isLengthInvalid || (options[2] && isInitiativeInvalid)) {
+        throw new Error(
+          `<div>${
+            isLengthInvalid
+              ? `<code>${options[1]}</code> is not a valid duration length.`
+              : ""
+          }</div><div>${
+            isInitiativeInvalid
+              ? `<code>${options[2]}</code> is not a valid duration initiative.`
+              : ""
+          }</div><div>You must enter a number when passing in either a duration length or a duration initiative.</div>`
+        );
+      }
+    }
+
+    if (command === ADD_GM_DURATION) {
+      if (!options[0] || !options[1]) {
+        throw new Error(
+          `When adding a GM duration, both a description and length must be included.`
+        );
+      }
+
+      if (isNaN(parseInt(options[1]))) {
+        throw new Error(
+          `<code>${options[1]}</code> is not a valid GM duration length. You must enter a number when passing in a GM duration length.`
+        );
+      }
+    }
+
+    if (command === SORT) {
+      if (options[0] && isNaN(parseInt(options[0]))) {
+        throw new Error(
+          `<code>${options[0]}</code> is not a valid round number.`
+        );
+      }
+
+      if (!/^[\+|-]\s*\d+$/.test(options[1])) {
+        throw new Error(
+          `<code>${options[1]}</code> is not a valid round formula. The round formula must start with a plus <code>+</code> or minus <code>-</code> sign, followed by a number, and cannot contain any whitespace.`
+        );
+      }
+
+      if (!/^ascending|descending$/i.test(options[2])) {
+        throw new Error(
+          `<code>${options[2]}</code> is not a valid sorting order. The sorting order must either be <code>ascending</code> or <code>descending</code>.`
+        );
+      }
+    }
+
+    if (command === CONFIG && !options) {
+      throw new Error(
+        `You must pass in a config setting to update when calling the <code>${CONFIG}</code> command.`
+      );
+    }
+
+    if (command === CONFIG && options) {
+      if (options.length !== 2) {
+        throw new Error(
+          `When calling the <code>${CONFIG}</code> command to update config settings, you must pass in the setting to update as the first option and the new setting as the second option.`
+        );
+      }
+
+      if (!_.contains(CONFIG_SETTINGS, options[0])) {
+        throw new Error(
+          `<code>${options[0]}</code> is not a valid config setting. When using the <code>${CONFIG}</code> command, the setting passed in must match exactly, including lettercase. The valid config settings are <code>${roundDisplayName}</code>, <code>${AUTO_CLEAR}</code>, and <code>${AUTO_DELETE}</code>`
+        );
+      }
+
+      if (options[0] === ROUND_DISPLAY_NAME && !options[1]) {
+        throw new Error(
+          `The new value for the <code>${options[0]}</code> setting cannot be blank.`
+        );
+      }
+
+      if (
+        [AUTO_CLEAR, AUTO_DELETE].includes(options[0]) &&
+        !/^true|false$/i.test(options[1])
+      ) {
+        throw new Error(
+          `<code>${options[1]}</code> is not a valid setting value for the <code>${options[0]}</code> setting. You must either pass in a new value of <code>true</code> or <code>false</code>.`
+        );
+      }
+    }
+
+    return [command, ...options];
   }
 
   function clearTurnorder() {
     setTurnOrder([]);
-    state.Durations.gmDurations = [];
-    state.Durations.isTurnorderSorted = false;
+    state[DURATION_BASE_NAME].gmDurations = [];
+    state[DURATION_BASE_NAME].IsInitiallySorted = false;
 
     sendMessage(
       "/w gm The turnorder has been cleared and all GM durations have been deleted."
     );
   }
 
-  function sortTurnorder(turnorder, roundStart, roundFormula, sortingOrder) {
-    roundStart = roundStart || "1";
-    roundFormula = roundFormula || "+1";
-    sortingOrder = "descending";
-    const { roundDisplayName, isTurnorderSorted } = state.Durations;
-
+  function sortTurnorder(
+    turnorder,
+    roundStart = "1",
+    roundFormula = "+1",
+    sortingOrder = "descending"
+  ) {
+    const { roundDisplayName, IsInitiallySorted } = state[DURATION_BASE_NAME];
     const sortedTurnorder = _.map(
       _.filter(turnorder, (turnItem) => turnItem.custom !== roundDisplayName),
       (turnItem) => {
@@ -166,9 +273,9 @@ const Durations = (function () {
       ...sortedTurnorder,
     ];
 
-    if (!isTurnorderSorted || turnorder[0].custom === roundDisplayName) {
-      if (!isTurnorderSorted) {
-        state.Durations.isTurnorderSorted = true;
+    if (!IsInitiallySorted || turnorder[0].custom === roundDisplayName) {
+      if (!IsInitiallySorted) {
+        state[DURATION_BASE_NAME].IsInitiallySorted = true;
       }
       return turnorderWithRound;
     }
@@ -201,7 +308,7 @@ const Durations = (function () {
 
   function addGMDuration(description, length) {
     const newGMDurations = [
-      ...state.Durations.gmDurations,
+      ...state[DURATION_BASE_NAME].gmDurations,
       {
         custom: description,
         pr: parseInt(length),
@@ -210,7 +317,7 @@ const Durations = (function () {
       },
     ];
 
-    state.Durations.gmDurations = newGMDurations;
+    state[DURATION_BASE_NAME].gmDurations = newGMDurations;
 
     sendMessage(
       `/w gm The <code>${description}</code> GM duration has been added with a length of <code>${length}</code> round${
@@ -221,28 +328,32 @@ const Durations = (function () {
 
   function showGMDurations(gmDurationsToShow) {
     if (gmDurationsToShow.length) {
-      let combinedDurationMessage = "";
+      const combinedDurationMessage = [];
       const groupedDurations = _.groupBy(gmDurationsToShow, "pr");
 
       for (const key in groupedDurations) {
-        let groupMessage = "";
+        const groupMessage = _.map(
+          groupedDurations[key],
+          (groupItem) =>
+            `<li style="margin: 5px 0;"><a href="!durations ${COMMANDS.DELETE_GM_DURATION}|${groupItem.id}">Delete</a> ${groupItem.custom}</li>`
+        ).join("");
+
         const keyNumber = parseInt(key);
-
-        _.each(groupedDurations[key], (groupItem) => {
-          groupMessage += `<li style="margin: 5px 0;"><a href="!durations delete-gmd|${groupItem.id}">Delete</a> ${groupItem.custom}</li>`;
-        });
-
-        combinedDurationMessage += `<div style="border: 1px solid gray;padding: 5px; margin-bottom: 5px;"><div style="font-weight: bold;">${
-          keyNumber < 0
-            ? "A previous round"
-            : keyNumber === 0
-            ? "This round"
-            : `In ${keyNumber} round${keyNumber > 1 ? "s" : ""}`
-        }</div><ul>${groupMessage}</ul></div>`;
+        combinedDurationMessage.push(
+          `<div style="border: 1px solid gray;padding: 5px; margin-bottom: 5px;"><div style="font-weight: bold;">${
+            keyNumber < 0
+              ? "A previous round"
+              : keyNumber === 0
+              ? "This round"
+              : `In ${keyNumber} round${keyNumber > 1 ? "s" : ""}`
+          }</div><ul>${groupMessage}</ul></div>`
+        );
       }
 
       sendMessage(
-        `/w gm <div><div style="font-size: 1.75rem; margin: 10px 0; font-weight: bold;">Current GM Durations</div>${combinedDurationMessage}</div>`
+        `/w gm <div><div style="font-size: 1.75rem; margin: 10px 0; font-weight: bold;">Current GM Durations</div>${combinedDurationMessage.join(
+          ""
+        )}</div>`
       );
     } else {
       sendMessage("/w gm There are currently no GM durations to show.");
@@ -250,7 +361,7 @@ const Durations = (function () {
   }
 
   function deleteGMDuration(durationID) {
-    const { gmDurations } = state.Durations;
+    const { gmDurations } = state[DURATION_BASE_NAME];
     const deletedDuration = _.find(
       gmDurations,
       (duration) => duration.id === durationID
@@ -262,7 +373,7 @@ const Durations = (function () {
         (gmDuration) => gmDuration.id !== durationID
       );
 
-      state.Durations.gmDurations = gmDurationsAfterDelete;
+      state[DURATION_BASE_NAME].gmDurations = gmDurationsAfterDelete;
 
       if (gmDurationsAfterDelete.length) {
         showGMDurations(gmDurationsAfterDelete);
@@ -271,8 +382,8 @@ const Durations = (function () {
         `/w gm The <code>${deletedDuration.custom}</code> GM duration has been deleted.`
       );
     } else {
-      sendMessage(
-        `/w gm Could not find a GM duration to delete with ID <code>${durationID}</code>.`
+      throw new Error(
+        `Could not find a GM duration to delete with ID <code>${durationID}</code>.`
       );
     }
   }
@@ -292,7 +403,7 @@ const Durations = (function () {
     } = COMMANDS;
     const { ROUND_DISPLAY_NAME, AUTO_CLEAR, AUTO_DELETE } = CONFIG_SETTINGS;
     const { roundDisplayName, autoClearTurnorder, autoDeleteDurations } =
-      state.Durations;
+      state[DURATION_BASE_NAME];
 
     const tableHeader =
       "<thead><tr><th style='padding: 2px;'>Command</th><th style='padding: 2px 2px 2px 10px;'>Description</th></tr></thead>";
@@ -356,14 +467,11 @@ const Durations = (function () {
         SHOW_GM_DURATIONS,
         DELETE_GM_DURATION,
         CLEAR,
-        CLEAR_TURNORDER,
         SORT,
-        SORT_TURNORDER,
         CONFIG,
       } = COMMANDS;
 
-      const [prefix, ...options] = message.content.split("|");
-      const command = prefix.split(" ")[1].toLowerCase();
+      const [command, ...options] = validateCommand(message);
 
       switch (command) {
         case ADD_DURATION:
@@ -373,48 +481,38 @@ const Durations = (function () {
           addGMDuration(...options);
           break;
         case SHOW_GM_DURATIONS:
-          showGMDurations(state.Durations.gmDurations);
+          showGMDurations(state[DURATION_BASE_NAME].gmDurations);
           break;
         case DELETE_GM_DURATION:
           deleteGMDuration(parseInt(options[0]));
           break;
         case CLEAR:
-        case CLEAR_TURNORDER:
           clearTurnorder();
           break;
         case SORT:
-        case SORT_TURNORDER:
           const turnorder = getTurnorder();
           const sortedTurnorder = sortTurnorder(turnorder, ...options);
           setTurnOrder(sortedTurnorder);
           break;
         case CONFIG:
-          log("setting");
-          log(options[0]);
-          log("value");
-          log(options[1]);
-          if (options.length) {
-            state.Durations[options[0]] =
-              options[0] === CONFIG_SETTINGS.ROUND_DISPLAY_NAME
-                ? options[1]
-                : options[1].toLowerCase() === "true";
-          }
+          state[DURATION_BASE_NAME][options[0]] =
+            options[0] === CONFIG_SETTINGS.ROUND_DISPLAY_NAME
+              ? options[1]
+              : options[1].toLowerCase() === "true";
 
+          break;
+        default:
           sendMessage(buildConfigDisplay());
           break;
       }
     } catch (error) {
-      sendMessage(`/w gm ${error}`);
+      sendMessage(`/w gm ${error.message}`);
     }
   }
 
   function registerEventHandlers() {
     on("chat:message", (message) => {
-      if (
-        playerIsGM(message.playerid) &&
-        message.type === "api" &&
-        /^!durations/i.test(message.content)
-      ) {
+      if (message.type === "api" && /^!durations/i.test(message.content)) {
         handleChatInput(message);
       }
     });
@@ -422,7 +520,7 @@ const Durations = (function () {
     on("change:campaign:initiativepage", () => {
       if (
         Campaign().get("initiativepage") &&
-        state.Durations.autoClearTurnorder
+        state[DURATION_BASE_NAME].autoClearTurnorder
       ) {
         clearTurnorder();
       }
@@ -447,11 +545,11 @@ const Durations = (function () {
       );
 
       if (
-        state.Durations.isTurnorderSorted &&
+        state[DURATION_BASE_NAME].IsInitiallySorted &&
         _.isEqual(turnorder, adjustedPrevTurnorder)
       ) {
         const { autoDeleteDurations, gmDurations, roundDisplayName } =
-          state.Durations;
+          state[DURATION_BASE_NAME];
 
         if (autoDeleteDurations) {
           const lastTurnItem = turnorder[turnorder.length - 1];
@@ -483,7 +581,7 @@ const Durations = (function () {
 
           showGMDurations(updatedGMDurations);
 
-          state.Durations.gmDurations = autoDeleteDurations
+          state[DURATION_BASE_NAME].gmDurations = autoDeleteDurations
             ? _.filter(
                 updatedGMDurations,
                 (gmDuration) => parseFloat(gmDuration.pr) > 0
@@ -497,7 +595,7 @@ const Durations = (function () {
   function checkInstall() {
     if (!_.has(state, "Durations")) {
       log("Installing " + DURATION_DISPLAY_NAME);
-      state.Durations = JSON.parse(JSON.stringify(DEFAULT_STATE));
+      state[DURATION_BASE_NAME] = JSON.parse(JSON.stringify(DEFAULT_STATE));
 
       createMacros();
     }
