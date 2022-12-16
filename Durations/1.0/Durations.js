@@ -1,9 +1,17 @@
-delete state.Durations;
+/**
+ * Durations
+ *
+ * Version 1.0
+ * Last updated: December 16, 2022
+ * Author: thatblindgeye
+ * GitHub: https://github.com/thatblindgeye
+ */
+
 const Durations = (function () {
   "use strict";
 
   const VERSION = "1.0";
-  const LAST_UPDATED = 1668283397577;
+  const LAST_UPDATED = 1671226000469;
   const DURATION_BASE_NAME = "Durations";
   const DURATION_DISPLAY_NAME = `${DURATION_BASE_NAME} v${VERSION}`;
   const COMMANDS = {
@@ -42,7 +50,7 @@ const Durations = (function () {
     },
     SORT_MACRO: {
       name: "Durations-sort-turnorder",
-      action: `${PREFIX} ${COMMANDS.SORT}|?{Starting round}|?{Round formula}|?{Sort order|Ascending|Descending}`,
+      action: `${PREFIX} ${COMMANDS.SORT}|?{Starting round - must be an integer|1}|?{Round formula - must be "+" or "-" followed by an integer|+1}|?{Sort order|Ascending|Descending}`,
     },
   };
 
@@ -67,18 +75,19 @@ const Durations = (function () {
     );
 
     _.each(MACROS, (macro) => {
+      const { name, action } = macro;
       const existingMacro = findObjs(
-        { _type: "macro", name: macro.name },
+        { _type: "macro", name },
         { caseInsensitive: true }
       );
 
       if (!existingMacro.length) {
         createObj("macro", {
           _playerid: gmPlayers[0],
-          name: macro.name,
-          action: macro.action,
+          name: name,
+          action: action,
           visibleto:
-            macro.name === MACROS.ADD_DURATION_MACRO.name
+            name === MACROS.ADD_DURATION_MACRO.name
               ? "all"
               : gmPlayers.join(","),
         });
@@ -295,7 +304,7 @@ const Durations = (function () {
     const sortedTurnorder = sortTurnorder([
       ...turnorder,
       {
-        custom: name,
+        custom: `${name} (${insertAtInitiative})`,
         pr: length,
         id: "-1",
         initiative: parseFloat(insertAtInitiative),
@@ -409,12 +418,12 @@ const Durations = (function () {
       "<thead><tr><th style='padding: 2px;'>Command</th><th style='padding: 2px 2px 2px 10px;'>Description</th></tr></thead>";
 
     const addDurationCells = configRowTemplate({
-      commandCell: `<a href="!durations ${ADD_DURATION}|?{Duration name}|?{Duration length}|?{Insert at initiative}">Add Duration</a>`,
+      commandCell: `<a href="!durations ${ADD_DURATION}|?{Duration name}|?{Duration length - must be an integer}|?{Insert at initiative - must be an integer or decimal}">Add Duration</a>`,
       descriptionCell: `<div><code>!durations ${ADD_DURATION}|[duration name]|[duration length]|[initiative]</code></div><br/><div>Adds a duration to the Roll20 turn tracker, visible to all players in the game. The turnorder is automatically sorted after adding a duration.</div><br/><div>This command accepts the following arguments when called: <ul><li><span style="font-weight: bold;">Name:</span> the name of the item that will appear in the turnorder.</li><li><span style="font-weight: bold;">Length:</span> how long the duration will last for.</li><li><span style="font-weight: bold;">Initiative:</span> where in the turnorder the duration will be placed. This argument defaults to an initiative of <code>0</code> when a value is not passed in.</li></ul></div>`,
     });
 
     const addGMDurationCells = configRowTemplate({
-      commandCell: `<a href="!durations ${ADD_GM_DURATION}|?{GM duration description}|?{GM duration length}">Add GM Duration</a>`,
+      commandCell: `<a href="!durations ${ADD_GM_DURATION}|?{GM duration description}|?{GM duration length - must be an integer}">Add GM Duration</a>`,
       descriptionCell: `<div><code>!durations ${ADD_GM_DURATION}|[duration description]|[duration length]</code></div><br/><div>Adds a private duration that can be seen only by the GM. All GM durations appear in the Roll20 chat when shown, which occurs at the start of each round or when the <code>!durations ${SHOW_GM_DURATIONS}</code> command is called.</div><br/><div>This command accepts the following arguments when called: <ul><li><span style="font-weight: bold;">Description:</span> a description of the GM duration, which can be more detailed than a public duration in the turn tracker.</li><li><span style="font-weight: bold;">Length:</span> how long the GM duration will last. The length of a GM duration will decrease by 1 at the start of each round.</li></ul></div>`,
     });
 
@@ -429,7 +438,7 @@ const Durations = (function () {
     });
 
     const sortDurationsCells = configRowTemplate({
-      commandCell: `<a href="!durations ${SORT}|?{Starting round}|?{Round formula}|?{Sort order|Ascending|Descending}">Sort Turnorder</a>`,
+      commandCell: `<a href="!durations ${SORT}|?{Starting round - must be an integer|1}|?{Round formula - must be "+" or "-" followed by an integer|+1}|?{Sort order|Ascending|Descending}">Sort Turnorder</a>`,
       descriptionCell: `<div><code>!durations ${SORT}|[starting round]|[round formula]|[sort order]</code></div><br/><div>Sorts the turnorder, retaining the current turn.</div><br/><div>This command accepts the following arguments: <ul><li><span style="font-weight: bold;">Starting round:</span> the round number to start at when the turnorder is sorted for the first time after being cleared. This argument defaults to <code>1</code> when a value is not passed in.</li><li><span style="font-weight: bold;">Round formula:</span> the formula for adjusting the round number on each initiative pass. The value passed in must start with either a plus <code>+</code> or minus <code>-</code> sign, followed by a number. This argument defaults to a formula of <code>+1</code> when a value is not passed in.</li><li><span style="font-weight: bold;">Sort order:</span> determines what order to sort the turnorder in, and must be either <code>ascending</code> (lowest to highest) or <code>descending</code> (highest to lowest). This argument defaults to <code>descending</code> when a value is not passed in.</li></ul></div>`,
     });
 
@@ -598,6 +607,9 @@ const Durations = (function () {
       state[DURATION_BASE_NAME] = JSON.parse(JSON.stringify(DEFAULT_STATE));
 
       createMacros();
+      log(
+        "Durations-add, Durations-add-gmDuration, Durations-clear-turnorder, Durations-show-gmDurations, and Durations-sort-turnorder macros created..."
+      );
     }
 
     log(
