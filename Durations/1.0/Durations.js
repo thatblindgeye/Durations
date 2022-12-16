@@ -617,7 +617,7 @@ const Durations = (function () {
         LAST_UPDATED
       ).toLocaleDateString("en-US", {
         dateStyle: "long",
-      })}.`
+      })}. Send the '!durations' command (without quotes) in chat for a list of valid commands.`
     );
   }
 
