@@ -34,23 +34,23 @@ const Durations = (function () {
   const MACROS = {
     ADD_DURATION_MACRO: {
       name: "Durations-add",
-      action: `${PREFIX} ${COMMANDS.ADD_DURATION}|?{Duration name}|?{Duration length}|?{Insert at initiative}`,
+      action: `${PREFIX} ${COMMANDS.ADD_DURATION}|?{Duration name}|?{Duration length - must be an integer}|?{Insert at initiative - must be an integer or decimal}`,
     },
     ADD_GM_DURATION_MACRO: {
-      name: "Durations-add-gmDuration",
-      action: `${PREFIX} ${COMMANDS.ADD_GM_DURATION}|?{GM duration description}|?{GM duration length}`,
+      name: "Durations-add-gm",
+      action: `${PREFIX} ${COMMANDS.ADD_GM_DURATION}|?{GM duration description}|?{GM duration length - must be an integer}`,
     },
     SHOW_GM_DURATIONS_MACRO: {
-      name: "Durations-show-gmDurations",
+      name: "Durations-show-gm",
       action: `${PREFIX} ${COMMANDS.SHOW_GM_DURATIONS}`,
     },
     CLEAR_MACRO: {
-      name: "Durations-clear-turnorder",
+      name: "Durations-clear",
       action: `${PREFIX} ${COMMANDS.CLEAR}`,
     },
     SORT_MACRO: {
-      name: "Durations-sort-turnorder",
-      action: `${PREFIX} ${COMMANDS.SORT}|?{Starting round - must be an integer|1}|?{Round formula - must be "+" or "-" followed by an integer|+1}|?{Sort order|Ascending|Descending}`,
+      name: "Durations-sort",
+      action: `${PREFIX} ${COMMANDS.SORT}|1|+1|Descending`,
     },
   };
 
@@ -146,7 +146,7 @@ const Durations = (function () {
       }
 
       const isLengthInvalid = isNaN(parseInt(options[1]));
-      const isInitiativeInvalid = isNaN(parseInt(options[2]));
+      const isInitiativeInvalid = isNaN(parseFloat(options[2]));
 
       if (isLengthInvalid || (options[2] && isInitiativeInvalid)) {
         throw new Error(
@@ -299,7 +299,11 @@ const Durations = (function () {
     ];
   }
 
-  function addDuration(name, length, insertAtInitiative = 0) {
+  function addDuration(name, length, insertAtInitiative) {
+    if (!insertAtInitiative) {
+      insertAtInitiative = 0;
+    }
+
     const turnorder = getTurnorder();
     const sortedTurnorder = sortTurnorder([
       ...turnorder,
@@ -424,7 +428,7 @@ const Durations = (function () {
 
     const addGMDurationCells = configRowTemplate({
       commandCell: `<a href="!durations ${ADD_GM_DURATION}|?{GM duration description}|?{GM duration length - must be an integer}">Add GM Duration</a>`,
-      descriptionCell: `<div><code>!durations ${ADD_GM_DURATION}|[duration description]|[duration length]</code></div><br/><div>Adds a private duration that can be seen only by the GM. All GM durations appear in the Roll20 chat when shown, which occurs at the start of each round or when the <code>!durations ${SHOW_GM_DURATIONS}</code> command is called.</div><br/><div>This command accepts the following arguments when called: <ul><li><span style="font-weight: bold;">Description:</span> a description of the GM duration, which can be more detailed than a public duration in the turn tracker.</li><li><span style="font-weight: bold;">Length:</span> how long the GM duration will last. The length of a GM duration will decrease by 1 at the start of each round.</li></ul></div>`,
+      descriptionCell: `<div><code>!durations ${ADD_GM_DURATION}|[GM duration description]|[GM duration length - must be an integer]</code></div><br/><div>Adds a private duration that can be seen only by the GM. All GM durations appear in the Roll20 chat when shown, which occurs at the start of each round or when the <code>!durations ${SHOW_GM_DURATIONS}</code> command is called.</div><br/><div>This command accepts the following arguments when called: <ul><li><span style="font-weight: bold;">Description:</span> a description of the GM duration, which can be more detailed than a public duration in the turn tracker.</li><li><span style="font-weight: bold;">Length:</span> how long the GM duration will last. The length of a GM duration will decrease by 1 at the start of each round.</li></ul></div>`,
     });
 
     const showGMDurationsCells = configRowTemplate({
