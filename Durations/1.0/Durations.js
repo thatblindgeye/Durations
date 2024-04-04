@@ -2,7 +2,7 @@
  * Durations
  *
  * Version 1.0
- * Last updated: December 16, 2022
+ * Last updated: April 4, 2024
  * Author: thatblindgeye
  * GitHub: https://github.com/thatblindgeye
  */
@@ -11,7 +11,7 @@ const Durations = (function () {
   'use strict';
 
   const VERSION = '1.0';
-  const LAST_UPDATED = 1671226000469;
+  const LAST_UPDATED = 1712267938054;
   const DURATION_BASE_NAME = 'Durations';
   const DURATION_DISPLAY_NAME = `${DURATION_BASE_NAME} v${VERSION}`;
   const COMMANDS = {
