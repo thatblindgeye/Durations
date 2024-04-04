@@ -8,55 +8,55 @@
  */
 
 const Durations = (function () {
-  "use strict";
+  'use strict';
 
-  const VERSION = "1.0";
+  const VERSION = '1.0';
   const LAST_UPDATED = 1671226000469;
-  const DURATION_BASE_NAME = "Durations";
+  const DURATION_BASE_NAME = 'Durations';
   const DURATION_DISPLAY_NAME = `${DURATION_BASE_NAME} v${VERSION}`;
   const COMMANDS = {
-    ADD_DURATION: "add-duration",
-    ADD_GM_DURATION: "add-gmduration",
-    SHOW_GM_DURATIONS: "show-gmduration",
-    DELETE_GM_DURATION: "delete-gmduration",
-    CLEAR: "clear",
-    SORT: "sort",
-    CONFIG: "config",
+    ADD_DURATION: 'add-duration',
+    ADD_GM_DURATION: 'add-gmduration',
+    SHOW_GM_DURATIONS: 'show-gmduration',
+    DELETE_GM_DURATION: 'delete-gmduration',
+    CLEAR: 'clear',
+    SORT: 'sort',
+    CONFIG: 'config',
   };
 
   const CONFIG_SETTINGS = {
-    AUTO_CLEAR: "autoClearTurnorder",
-    AUTO_DELETE: "autoDeleteDurations",
-    ROUND_DISPLAY_NAME: "roundDisplayName",
+    AUTO_CLEAR: 'autoClearTurnorder',
+    AUTO_DELETE: 'autoDeleteDurations',
+    ROUND_DISPLAY_NAME: 'roundDisplayName',
   };
 
-  const PREFIX = "!durations";
+  const PREFIX = '!durations';
   const MACROS = {
     ADD_DURATION_MACRO: {
-      name: "Durations-add",
+      name: 'Durations-add',
       action: `${PREFIX} ${COMMANDS.ADD_DURATION}|?{Duration name}|?{Duration length - must be an integer}|?{Insert at initiative - must be an integer or decimal}`,
     },
     ADD_GM_DURATION_MACRO: {
-      name: "Durations-add-gm",
+      name: 'Durations-add-gm',
       action: `${PREFIX} ${COMMANDS.ADD_GM_DURATION}|?{GM duration description}|?{GM duration length - must be an integer}`,
     },
     SHOW_GM_DURATIONS_MACRO: {
-      name: "Durations-show-gm",
+      name: 'Durations-show-gm',
       action: `${PREFIX} ${COMMANDS.SHOW_GM_DURATIONS}`,
     },
     CLEAR_MACRO: {
-      name: "Durations-clear",
+      name: 'Durations-clear',
       action: `${PREFIX} ${COMMANDS.CLEAR}`,
     },
     SORT_MACRO: {
-      name: "Durations-sort",
+      name: 'Durations-sort',
       action: `${PREFIX} ${COMMANDS.SORT}|1|+1|Descending`,
     },
   };
 
   const DEFAULT_STATE = {
     gmDurations: [],
-    roundDisplayName: "<= Round =>",
+    roundDisplayName: '<= Round =>',
     IsInitiallySorted: false,
     autoDeleteDurations: true,
     autoClearTurnorder: true,
@@ -67,38 +67,38 @@ const Durations = (function () {
     const gmPlayers = _.pluck(
       _.filter(
         findObjs({
-          _type: "player",
+          _type: 'player',
         }),
-        (player) => playerIsGM(player.get("_id"))
+        (player) => playerIsGM(player.get('_id'))
       ),
-      "id"
+      'id'
     );
 
     _.each(MACROS, (macro) => {
       const { name, action } = macro;
       const existingMacro = findObjs(
-        { _type: "macro", name },
+        { _type: 'macro', name },
         { caseInsensitive: true }
       );
 
       if (!existingMacro.length) {
-        createObj("macro", {
+        createObj('macro', {
           _playerid: gmPlayers[0],
           name: name,
           action: action,
           visibleto:
             name === MACROS.ADD_DURATION_MACRO.name
-              ? "all"
-              : gmPlayers.join(","),
+              ? 'all'
+              : gmPlayers.join(','),
         });
       }
     });
   }
 
   function getTurnorder() {
-    const campaignTurnorder = Campaign().get("turnorder");
+    const campaignTurnorder = Campaign().get('turnorder');
 
-    if (campaignTurnorder === "") {
+    if (campaignTurnorder === '') {
       return [];
     } else {
       return JSON.parse(campaignTurnorder);
@@ -106,7 +106,7 @@ const Durations = (function () {
   }
 
   function setTurnOrder(turnorder) {
-    Campaign().set("turnorder", JSON.stringify(turnorder));
+    Campaign().set('turnorder', JSON.stringify(turnorder));
   }
 
   function sendMessage(message) {
@@ -117,8 +117,8 @@ const Durations = (function () {
     const { ADD_DURATION, ADD_GM_DURATION, SORT, CONFIG } = COMMANDS;
     const { ROUND_DISPLAY_NAME, AUTO_CLEAR, AUTO_DELETE } = CONFIG_SETTINGS;
 
-    const [prefix, ...options] = message.content.split("|");
-    const command = _.map(prefix.split(" "), (prefixItem) =>
+    const [prefix, ...options] = message.content.split('|');
+    const command = _.map(prefix.split(' '), (prefixItem) =>
       prefixItem.toLowerCase()
     )[1];
 
@@ -153,11 +153,11 @@ const Durations = (function () {
           `<div>${
             isLengthInvalid
               ? `<code>${options[1]}</code> is not a valid duration length.`
-              : ""
+              : ''
           }</div><div>${
             isInitiativeInvalid
               ? `<code>${options[2]}</code> is not a valid duration initiative.`
-              : ""
+              : ''
           }</div><div>You must enter a number when passing in either a duration length or a duration initiative.</div>`
         );
       }
@@ -241,28 +241,42 @@ const Durations = (function () {
     state[DURATION_BASE_NAME].IsInitiallySorted = false;
 
     sendMessage(
-      "/w gm The turnorder has been cleared and all GM durations have been deleted."
+      '/w gm The turnorder has been cleared and all GM durations have been deleted.'
     );
+  }
+
+  function logTurnorder() {
+    const turnorder = JSON.parse(Campaign().get('turnorder'));
+    const namedTurnorder = _.map(turnorder, (turnorderItem) => {
+      const obj = findObjs({ type: 'graphic', id: turnorderItem.id });
+
+      return { name: obj[0].get('name'), ...turnorderItem };
+    });
+
+    log('Previous turn order:');
+    log(namedTurnorder);
+    log('Previous GM durations:');
+    log(state[DURATION_BASE_NAME].gmDurations);
   }
 
   function sortTurnorder(
     turnorder,
-    roundStart = "1",
-    roundFormula = "+1",
-    sortingOrder = "descending"
+    roundStart = '1',
+    roundFormula = '+1',
+    sortingOrder = 'descending'
   ) {
     const { roundDisplayName, IsInitiallySorted } = state[DURATION_BASE_NAME];
     const sortedTurnorder = _.map(
       _.filter(turnorder, (turnItem) => turnItem.custom !== roundDisplayName),
       (turnItem) => {
-        if (!_.has(turnItem, "initiative")) {
+        if (!_.has(turnItem, 'initiative')) {
           return { ...turnItem, initiative: parseFloat(turnItem.pr) };
         }
 
         return turnItem;
       }
     ).sort((turnItemA, turnItemB) =>
-      sortingOrder.toLowerCase() === "descending"
+      sortingOrder.toLowerCase() === 'descending'
         ? turnItemB.initiative - turnItemA.initiative
         : turnItemA.initiative - turnItemB.initiative
     );
@@ -274,7 +288,7 @@ const Durations = (function () {
 
     const turnorderWithRound = [
       {
-        id: "-1",
+        id: '-1',
         pr: roundTurnItem ? roundTurnItem.pr : roundStart,
         custom: roundDisplayName,
         formula: roundTurnItem ? roundTurnItem.formula : roundFormula,
@@ -310,9 +324,9 @@ const Durations = (function () {
       {
         custom: `${name} (${insertAtInitiative})`,
         pr: length,
-        id: "-1",
+        id: '-1',
         initiative: parseFloat(insertAtInitiative),
-        formula: "-1",
+        formula: '-1',
       },
     ]);
 
@@ -325,7 +339,7 @@ const Durations = (function () {
       {
         custom: description,
         pr: parseInt(length),
-        formula: "-1",
+        formula: '-1',
         id: Date.now(),
       },
     ];
@@ -334,7 +348,7 @@ const Durations = (function () {
 
     sendMessage(
       `/w gm The <code>${description}</code> GM duration has been added with a length of <code>${length}</code> round${
-        length > 1 ? "s" : ""
+        length > 1 ? 's' : ''
       }.`
     );
   }
@@ -342,34 +356,34 @@ const Durations = (function () {
   function showGMDurations(gmDurationsToShow) {
     if (gmDurationsToShow.length) {
       const combinedDurationMessage = [];
-      const groupedDurations = _.groupBy(gmDurationsToShow, "pr");
+      const groupedDurations = _.groupBy(gmDurationsToShow, 'pr');
 
       for (const key in groupedDurations) {
         const groupMessage = _.map(
           groupedDurations[key],
           (groupItem) =>
             `<li style="margin: 5px 0;"><a href="!durations ${COMMANDS.DELETE_GM_DURATION}|${groupItem.id}">Delete</a> ${groupItem.custom}</li>`
-        ).join("");
+        ).join('');
 
         const keyNumber = parseInt(key);
         combinedDurationMessage.push(
           `<div style="border: 1px solid gray;padding: 5px; margin-bottom: 5px;"><div style="font-weight: bold;">${
             keyNumber < 0
-              ? "A previous round"
+              ? 'A previous round'
               : keyNumber === 0
-              ? "This round"
-              : `In ${keyNumber} round${keyNumber > 1 ? "s" : ""}`
+              ? 'This round'
+              : `In ${keyNumber} round${keyNumber > 1 ? 's' : ''}`
           }</div><ul>${groupMessage}</ul></div>`
         );
       }
 
       sendMessage(
         `/w gm <div><div style="font-size: 1.75rem; margin: 10px 0; font-weight: bold;">Current GM Durations</div>${combinedDurationMessage.join(
-          ""
+          ''
         )}</div>`
       );
     } else {
-      sendMessage("/w gm There are currently no GM durations to show.");
+      sendMessage('/w gm There are currently no GM durations to show.');
     }
   }
 
@@ -453,18 +467,18 @@ const Durations = (function () {
 
     const autoClearCells = configRowTemplate({
       commandCell: `<a href="!durations ${CONFIG}|${AUTO_CLEAR}|${
-        autoClearTurnorder ? "false" : "true"
+        autoClearTurnorder ? 'false' : 'true'
       }">Auto Clear Turnorder</a><div>Current setting: <code>${
-        autoClearTurnorder ? "Enabled" : "Disabled"
+        autoClearTurnorder ? 'Enabled' : 'Disabled'
       }</code></div>`,
       descriptionCell: `<div><code>!durations ${CONFIG}|${AUTO_CLEAR}|[true or false]</code></div><br/><div>When this config setting is enabled, the turnorder will be cleared and all GM durations will be deleted whenever the turnorder is opened.</div><br/><div>When calling this command, lettercase must be retained for the <code>${AUTO_CLEAR}</code> config setting in the command call.</div>`,
     });
 
     const autoDeleteCells = configRowTemplate({
       commandCell: `<a href="!durations ${CONFIG}|${AUTO_DELETE}|${
-        autoDeleteDurations ? "false" : "true"
+        autoDeleteDurations ? 'false' : 'true'
       }">Auto Delete Durations</a><div>Current setting: <code>${
-        autoDeleteDurations ? "Enabled" : "Disabled"
+        autoDeleteDurations ? 'Enabled' : 'Disabled'
       }</code></div>`,
       descriptionCell: `<div><code>!durations ${CONFIG}|${AUTO_DELETE}|[true or false]</code></div><br/><div>When enabled, any durations or GM durations that reach a length of 0 or less will automatically be deleted. Public durations in the turnorder are deleted when the turnorder is advanced and the duration is last in the turnorder. GM durations are deleted at the start of each round.</div><br/><div>When calling this command, lettercase must be retained for the <code>${AUTO_DELETE}</code> config setting in the command call.</div>`,
     });
@@ -511,7 +525,7 @@ const Durations = (function () {
           state[DURATION_BASE_NAME][options[0]] =
             options[0] === CONFIG_SETTINGS.ROUND_DISPLAY_NAME
               ? options[1]
-              : options[1].toLowerCase() === "true";
+              : options[1].toLowerCase() === 'true';
 
           break;
         default:
@@ -524,29 +538,30 @@ const Durations = (function () {
   }
 
   function registerEventHandlers() {
-    on("chat:message", (message) => {
-      if (message.type === "api" && /^!durations/i.test(message.content)) {
+    on('chat:message', (message) => {
+      if (message.type === 'api' && /^!durations/i.test(message.content)) {
         handleChatInput(message);
       }
     });
 
-    on("change:campaign:initiativepage", () => {
+    on('change:campaign:initiativepage', () => {
       if (
-        Campaign().get("initiativepage") &&
+        Campaign().get('initiativepage') &&
         state[DURATION_BASE_NAME].autoClearTurnorder
       ) {
+        logTurnorder();
         clearTurnorder();
       }
     });
 
-    on("change:campaign:turnorder", (obj, prev) => {
+    on('change:campaign:turnorder', (obj, prev) => {
       const turnorder = getTurnorder();
       const prevTurnorder = JSON.parse(prev.turnorder);
       // We want to adjust the previous turnorder to check whether it is equal to the current turnorder to prevent deletions from happening on just any turnorder change. The two should only be equal by advancing the turnorder normally, and should never be equal when manually adding/deleting items from the turnorder or manually rearranging it.
       const adjustedPrevTurnorder = _.map(
         [...prevTurnorder.slice(1), prevTurnorder[0]],
         (turnItem, index) => {
-          if (index === 0 && _.has(turnItem, "formula")) {
+          if (index === 0 && _.has(turnItem, 'formula')) {
             return {
               ...turnItem,
               pr: parseFloat(turnItem.pr) + parseFloat(turnItem.formula),
@@ -606,21 +621,21 @@ const Durations = (function () {
   }
 
   function checkInstall() {
-    if (!_.has(state, "Durations")) {
-      log("Installing " + DURATION_DISPLAY_NAME);
+    if (!_.has(state, 'Durations')) {
+      log('Installing ' + DURATION_DISPLAY_NAME);
       state[DURATION_BASE_NAME] = JSON.parse(JSON.stringify(DEFAULT_STATE));
 
       createMacros();
       log(
-        "Durations-add, Durations-add-gmDuration, Durations-clear-turnorder, Durations-show-gmDurations, and Durations-sort-turnorder macros created..."
+        'Durations-add, Durations-add-gmDuration, Durations-clear-turnorder, Durations-show-gmDurations, and Durations-sort-turnorder macros created...'
       );
     }
 
     log(
       `${DURATION_DISPLAY_NAME} installed. Last updated ${new Date(
         LAST_UPDATED
-      ).toLocaleDateString("en-US", {
-        dateStyle: "long",
+      ).toLocaleDateString('en-US', {
+        dateStyle: 'long',
       })}. Send the '!durations' command (without quotes) in chat for a list of valid commands.`
     );
   }
@@ -628,11 +643,12 @@ const Durations = (function () {
   return {
     checkInstall,
     registerEventHandlers,
+    addDuration,
   };
 })();
 
-on("ready", () => {
-  "use strict";
+on('ready', () => {
+  'use strict';
 
   Durations.checkInstall();
   Durations.registerEventHandlers();
