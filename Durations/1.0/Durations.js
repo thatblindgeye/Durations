@@ -245,12 +245,15 @@ const Durations = (function () {
     );
   }
 
-  function logTurnorder() {
-    const turnorder = JSON.parse(Campaign().get('turnorder'));
-    const namedTurnorder = _.map(turnorder, (turnorderItem) => {
+  function logTurnorder(turnorderToLog) {
+    const namedTurnorder = _.map(turnorderToLog, (turnorderItem) => {
       const obj = findObjs({ type: 'graphic', id: turnorderItem.id });
 
-      return { name: obj[0].get('name'), ...turnorderItem };
+      if (obj) {
+        return { name: obj[0].get('name'), ...turnorderItem };
+      }
+
+      return turnorderItem;
     });
 
     log('Previous turn order:');
@@ -549,8 +552,11 @@ const Durations = (function () {
         Campaign().get('initiativepage') &&
         state[DURATION_BASE_NAME].autoClearTurnorder
       ) {
-        logTurnorder();
-        clearTurnorder();
+        const turnorder = JSON.parse(Campaign().get('turnorder'));
+        if (turnorder.length) {
+          logTurnorder(turnorder);
+          clearTurnorder();
+        }
       }
     });
 
